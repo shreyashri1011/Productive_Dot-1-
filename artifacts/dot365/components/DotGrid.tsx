@@ -16,8 +16,8 @@ import {
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const COLS = 25;
-const PADDING = 24;
-const GAP = 3;
+const PADDING = 20;
+const GAP = 2;
 const DOT_SIZE = Math.floor((SCREEN_WIDTH - PADDING * 2 - GAP * (COLS - 1)) / COLS);
 
 type Props = {
@@ -37,7 +37,7 @@ function getDotColor(
     return COLORS.dotToday;
   }
   if (rating === undefined || rating === 0) {
-    return "#2A2A2A";
+    return "#282828";
   }
   return COLORS.productivityColors[Math.min(10, Math.max(0, rating))];
 }
@@ -58,8 +58,7 @@ export default function DotGrid({ onDotPress, selectedDay }: Props) {
       const rating = dayData?.rating;
       const color = getDotColor(d, todayDayOfYear, rating);
       const isToday = d === todayDayOfYear;
-      const isPast = d < todayDayOfYear;
-      result.push({ dayOfYear: d, date, color, isToday, isPast, rating });
+      result.push({ dayOfYear: d, date, color, isToday });
     }
     return result;
   }, [productivityMap, todayDayOfYear, totalDays, year]);
@@ -119,9 +118,9 @@ const styles = StyleSheet.create({
   todayDot: {
     shadowColor: "#FFFFFF",
     shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 4,
-    elevation: 4,
+    shadowOpacity: 0.9,
+    shadowRadius: 5,
+    elevation: 5,
   },
   selectedDot: {
     borderWidth: 1.5,
