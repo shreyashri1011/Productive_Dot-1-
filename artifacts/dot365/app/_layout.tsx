@@ -42,7 +42,7 @@ export default function RootLayout() {
       <ErrorBoundary>
         <ProductivityProvider>
           <GestureHandlerRootView style={{ flex: 1, backgroundColor: "#0A0A0A" }}>
-            <StatusBar style="light" />
+            <StatusBar style="light" hidden={false} />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="index" />
             </Stack>

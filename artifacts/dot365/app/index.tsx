@@ -1,21 +1,21 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   Pressable,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { Feather } from "@expo/vector-icons";
 
 import COLORS from "@/constants/colors";
-import DotGrid from "@/components/DotGrid";
 import RatingSheet from "@/components/RatingSheet";
 import {
   getDayOfYear,
   getTotalDaysInYear,
+  getDateFromDayOfYear,
+  getDayKey,
   useProductivity,
 } from "@/context/ProductivityContext";
 
@@ -24,14 +24,84 @@ type SelectedDay = {
   dayOfYear: number;
 };
 
+const DOT_GAP = 3;
+const TOTAL_DOTS = 365;
+const H_PADDING = 24;
+const TIME_HEIGHT = 120;
+
+function getDotColor(
+  dayOfYear: number,
+  todayDayOfYear: number,
+  rating: number | undefined
+): string {
+  if (dayOfYear > todayDayOfYear) return COLORS.dotFuture;
+  if (dayOfYear === todayDayOfYear) return COLORS.dotToday;
+  if (rating === undefined || rating === 0) return "#222222";
+  return COLORS.productivityColors[Math.min(10, Math.max(0, rating))];
+}
+
 export default function HomeScreen() {
+  const { width: screenW, height: screenH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { isLoaded } = useProductivity();
+  const { productivityMap, isLoaded } = useProductivity();
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const now = useMemo(() => new Date(), []);
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    timerRef.current = setInterval(tick, 60000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
+  const year = now.getFullYear();
   const todayDayOfYear = getDayOfYear(now);
+  const totalDays = getTotalDaysInYear(year);
+
+  const hours = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, "0");
+  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
+  const timeString = `${displayHour}:${minutes}`;
+  const dateStr = now.toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  const { dotSize, cols } = useMemo(() => {
+    const availW = screenW - H_PADDING * 2;
+    const availH = screenH - insets.top - insets.bottom - TIME_HEIGHT - 32;
+
+    let bestDotSize = 0;
+    let bestCols = 20;
+
+    for (let c = 10; c <= 30; c++) {
+      const rows = Math.ceil(TOTAL_DOTS / c);
+      const dotW = (availW - DOT_GAP * (c - 1)) / c;
+      const dotH = (availH - DOT_GAP * (rows - 1)) / rows;
+      const d = Math.min(dotW, dotH);
+      if (d > bestDotSize) {
+        bestDotSize = d;
+        bestCols = c;
+      }
+    }
+
+    return { dotSize: Math.floor(bestDotSize), cols: bestCols };
+  }, [screenW, screenH, insets]);
+
+  const dots = useMemo(() => {
+    if (!isLoaded || dotSize === 0) return [];
+    const result = [];
+    for (let d = 1; d <= totalDays; d++) {
+      const date = getDateFromDayOfYear(year, d);
+      const key = getDayKey(date);
+      const dayData = productivityMap[key];
+      const color = getDotColor(d, todayDayOfYear, dayData?.rating);
+      result.push({ dayOfYear: d, date, color, isToday: d === todayDayOfYear });
+    }
+    return result;
+  }, [productivityMap, todayDayOfYear, totalDays, year, isLoaded, dotSize]);
 
   const handleDotPress = useCallback((date: Date, dayOfYear: number) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -39,68 +109,49 @@ export default function HomeScreen() {
     setSheetOpen(true);
   }, []);
 
-  const handleTodayPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    setSelectedDay({ date: now, dayOfYear: todayDayOfYear });
-    setSheetOpen(true);
-  }, [now, todayDayOfYear]);
-
   const handleCloseSheet = useCallback(() => {
     setSheetOpen(false);
     setSelectedDay(null);
   }, []);
 
-  const hours = now.getHours();
-  const minutes = String(now.getMinutes()).padStart(2, "0");
-  const displayHour = hours % 12 === 0 ? 12 : hours % 12;
-  const timeString = `${displayHour}:${minutes}`;
-
-  const dateStr = now.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  const gridWidth = cols * dotSize + (cols - 1) * DOT_GAP;
+  const rows = Math.ceil(TOTAL_DOTS / cols);
+  const gridHeight = rows * dotSize + (rows - 1) * DOT_GAP;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.timeSection}>
-          <Text style={styles.time}>{timeString}</Text>
-          <Text style={styles.date}>{dateStr}</Text>
+    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
+      <View style={styles.timeBlock}>
+        <Text style={styles.time}>{timeString}</Text>
+        <Text style={styles.date}>{dateStr}</Text>
+      </View>
+
+      <View style={[styles.gridContainer, { width: gridWidth, height: gridHeight }]}>
+        <View style={styles.grid}>
+          {dots.map((dot) => {
+            const isSelected = selectedDay?.dayOfYear === dot.dayOfYear;
+            return (
+              <Pressable
+                key={dot.dayOfYear}
+                onPress={() => handleDotPress(dot.date, dot.dayOfYear)}
+                hitSlop={2}
+              >
+                <View
+                  style={[
+                    {
+                      width: dotSize,
+                      height: dotSize,
+                      borderRadius: dotSize / 2,
+                      backgroundColor: dot.color,
+                    },
+                    dot.isToday && styles.todayGlow,
+                    isSelected && styles.selectedRing,
+                  ]}
+                />
+              </Pressable>
+            );
+          })}
         </View>
-
-        <View style={styles.gridWrapper}>
-          <DotGrid
-            onDotPress={handleDotPress}
-            selectedDay={selectedDay?.dayOfYear}
-          />
-        </View>
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.rateButton,
-            pressed && styles.rateButtonPressed,
-          ]}
-          onPress={handleTodayPress}
-        >
-          <Feather name="edit-2" size={13} color="rgba(255,255,255,0.5)" />
-          <Text style={styles.rateButtonText}>Rate today</Text>
-        </Pressable>
-      </ScrollView>
-
-      {sheetOpen && selectedDay && (
-        <RatingSheet
-          date={selectedDay.date}
-          dayOfYear={selectedDay.dayOfYear}
-          onClose={handleCloseSheet}
-          isToday={selectedDay.dayOfYear === todayDayOfYear}
-          isPast={selectedDay.dayOfYear < todayDayOfYear}
-        />
-      )}
+      </View>
     </View>
   );
 }
@@ -109,56 +160,45 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-  },
-  scroll: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: 40,
-    justifyContent: "center",
-    gap: 28,
-  },
-  timeSection: {
     alignItems: "center",
-    paddingTop: 20,
-    gap: 4,
+    justifyContent: "center",
+    gap: 20,
+  },
+  timeBlock: {
+    alignItems: "center",
+    gap: 3,
   },
   time: {
-    fontSize: 72,
+    fontSize: 80,
     fontWeight: "200",
     color: COLORS.textPrimary,
     fontFamily: "Inter_400Regular",
-    letterSpacing: -2,
+    letterSpacing: -3,
+    lineHeight: 88,
   },
   date: {
     fontSize: 14,
-    color: "rgba(255,255,255,0.4)",
+    color: "rgba(255,255,255,0.38)",
     fontFamily: "Inter_400Regular",
-    letterSpacing: 0.2,
+    letterSpacing: 0.1,
   },
-  gridWrapper: {
-    paddingVertical: 4,
+  gridContainer: {
+    alignItems: "flex-start",
   },
-  rateButton: {
+  grid: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 6,
-    alignSelf: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.1)",
+    flexWrap: "wrap",
+    gap: DOT_GAP,
   },
-  rateButtonPressed: {
-    opacity: 0.6,
+  todayGlow: {
+    shadowColor: "#FFFFFF",
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.95,
+    shadowRadius: 5,
+    elevation: 6,
   },
-  rateButtonText: {
-    fontSize: 12,
-    color: "rgba(255,255,255,0.4)",
-    fontFamily: "Inter_400Regular",
-    letterSpacing: 0.3,
+  selectedRing: {
+    borderWidth: 1.5,
+    borderColor: "rgba(255,255,255,0.55)",
   },
 });
