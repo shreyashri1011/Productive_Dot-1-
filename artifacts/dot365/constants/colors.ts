@@ -10,7 +10,7 @@ const COLORS = {
   textTertiary: "#444444",
 
   dotFuture: "#1C1C1C",
-  dotToday: "#FFFFFF",
+  dotToday: "#C9A96E",
 
   productivityColors: {
     0: "#1C1C1C",

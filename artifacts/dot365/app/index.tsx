@@ -24,24 +24,23 @@ type SelectedDay = {
   dayOfYear: number;
 };
 
+const COLS = 25;
 const DOT_GAP = 3;
-const TOTAL_DOTS = 365;
-const H_PADDING = 24;
-const TIME_HEIGHT = 120;
+const H_PADDING = 20;
 
 function getDotColor(
   dayOfYear: number,
   todayDayOfYear: number,
   rating: number | undefined
 ): string {
-  if (dayOfYear > todayDayOfYear) return COLORS.dotFuture;
+  if (dayOfYear > todayDayOfYear) return "#181818";
   if (dayOfYear === todayDayOfYear) return COLORS.dotToday;
-  if (rating === undefined || rating === 0) return "#222222";
+  if (rating === undefined || rating === 0) return "#2C2C2C";
   return COLORS.productivityColors[Math.min(10, Math.max(0, rating))];
 }
 
 export default function HomeScreen() {
-  const { width: screenW, height: screenH } = useWindowDimensions();
+  const { width: screenW } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { productivityMap, isLoaded } = useProductivity();
   const [selectedDay, setSelectedDay] = useState<SelectedDay | null>(null);
@@ -69,26 +68,8 @@ export default function HomeScreen() {
     day: "numeric",
   });
 
-  const { dotSize, cols } = useMemo(() => {
-    const availW = screenW - H_PADDING * 2;
-    const availH = screenH - insets.top - insets.bottom - TIME_HEIGHT - 32;
-
-    let bestDotSize = 0;
-    let bestCols = 20;
-
-    for (let c = 10; c <= 30; c++) {
-      const rows = Math.ceil(TOTAL_DOTS / c);
-      const dotW = (availW - DOT_GAP * (c - 1)) / c;
-      const dotH = (availH - DOT_GAP * (rows - 1)) / rows;
-      const d = Math.min(dotW, dotH);
-      if (d > bestDotSize) {
-        bestDotSize = d;
-        bestCols = c;
-      }
-    }
-
-    return { dotSize: Math.floor(bestDotSize), cols: bestCols };
-  }, [screenW, screenH, insets]);
+  const availW = screenW - H_PADDING * 2;
+  const dotSize = Math.floor((availW - DOT_GAP * (COLS - 1)) / COLS);
 
   const dots = useMemo(() => {
     if (!isLoaded || dotSize === 0) return [];
@@ -114,18 +95,14 @@ export default function HomeScreen() {
     setSelectedDay(null);
   }, []);
 
-  const gridWidth = cols * dotSize + (cols - 1) * DOT_GAP;
-  const rows = Math.ceil(TOTAL_DOTS / cols);
-  const gridHeight = rows * dotSize + (rows - 1) * DOT_GAP;
-
   return (
-    <View style={[styles.container, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-      <View style={styles.timeBlock}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <View style={styles.timeSection}>
         <Text style={styles.time}>{timeString}</Text>
         <Text style={styles.date}>{dateStr}</Text>
       </View>
 
-      <View style={[styles.gridContainer, { width: gridWidth, height: gridHeight }]}>
+      <View style={[styles.gridWrap, { paddingHorizontal: H_PADDING }]}>
         <View style={styles.grid}>
           {dots.map((dot) => {
             const isSelected = selectedDay?.dayOfYear === dot.dayOfYear;
@@ -133,25 +110,57 @@ export default function HomeScreen() {
               <Pressable
                 key={dot.dayOfYear}
                 onPress={() => handleDotPress(dot.date, dot.dayOfYear)}
-                hitSlop={2}
+                hitSlop={3}
               >
-                <View
-                  style={[
-                    {
+                {dot.isToday ? (
+                  <View style={{ width: dotSize, height: dotSize, alignItems: "center", justifyContent: "center" }}>
+                    <View
+                      style={{
+                        position: "absolute",
+                        width: dotSize + 5,
+                        height: dotSize + 5,
+                        borderRadius: (dotSize + 5) / 2,
+                        borderWidth: 1.5,
+                        borderColor: COLORS.dotToday,
+                        opacity: 0.45,
+                      }}
+                    />
+                    <View
+                      style={{
+                        width: dotSize - 1,
+                        height: dotSize - 1,
+                        borderRadius: (dotSize - 1) / 2,
+                        backgroundColor: COLORS.dotToday,
+                      }}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    style={{
                       width: dotSize,
                       height: dotSize,
                       borderRadius: dotSize / 2,
                       backgroundColor: dot.color,
-                    },
-                    dot.isToday && styles.todayGlow,
-                    isSelected && styles.selectedRing,
-                  ]}
-                />
+                      borderWidth: isSelected ? 1.5 : 0,
+                      borderColor: "rgba(255,255,255,0.4)",
+                    }}
+                  />
+                )}
               </Pressable>
             );
           })}
         </View>
       </View>
+
+      {sheetOpen && selectedDay && (
+        <RatingSheet
+          date={selectedDay.date}
+          dayOfYear={selectedDay.dayOfYear}
+          onClose={handleCloseSheet}
+          isToday={selectedDay.dayOfYear === todayDayOfYear}
+          isPast={selectedDay.dayOfYear < todayDayOfYear}
+        />
+      )}
     </View>
   );
 }
@@ -160,45 +169,34 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
-    alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-start",
     gap: 20,
   },
-  timeBlock: {
+  timeSection: {
     alignItems: "center",
-    gap: 3,
+    gap: 4,
+    paddingTop: 60,
   },
   time: {
-    fontSize: 80,
+    fontSize: 72,
     fontWeight: "200",
     color: COLORS.textPrimary,
     fontFamily: "Inter_400Regular",
     letterSpacing: -3,
-    lineHeight: 88,
+    lineHeight: 80,
   },
   date: {
-    fontSize: 14,
-    color: "rgba(255,255,255,0.38)",
+    fontSize: 13,
+    color: "rgba(255,255,255,0.32)",
     fontFamily: "Inter_400Regular",
     letterSpacing: 0.1,
   },
-  gridContainer: {
-    alignItems: "flex-start",
+  gridWrap: {
+    width: "100%",
   },
   grid: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: DOT_GAP,
-  },
-  todayGlow: {
-    shadowColor: "#FFFFFF",
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.95,
-    shadowRadius: 5,
-    elevation: 6,
-  },
-  selectedRing: {
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.55)",
   },
 });

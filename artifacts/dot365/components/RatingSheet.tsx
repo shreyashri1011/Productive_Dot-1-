@@ -109,7 +109,9 @@ export default function RatingSheet({ date, dayOfYear, onClose, isToday, isPast 
   const dayNum = date.getDate();
   const year = date.getFullYear();
 
-  const dotColor = selectedRating > 0
+  const dotColor = isToday && selectedRating === 0
+    ? COLORS.dotToday
+    : selectedRating > 0
     ? COLORS.productivityColors[selectedRating]
     : COLORS.dotFuture;
 
